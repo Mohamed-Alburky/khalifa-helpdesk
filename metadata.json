@@ -1,0 +1,6 @@
+{
+  "name": "Helpdesk",
+  "description": "نظام إدارة الدعم الفني وتذاكر المشاكل لمجموعة خليفة القابضة مع فصل الصلاحيات للموظفين والمهندسين والمدراء، ومتابعة فورية للمحادثات والتواريخ التلقائية.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
