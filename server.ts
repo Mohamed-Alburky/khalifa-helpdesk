@@ -13,7 +13,6 @@ dotenv.config();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const DB_FILE = path.join(process.cwd(), "db.json");
 
-
 // Predefined locations
 const PRESET_LOCATIONS = [
   "HQ Management Building - مبنى الإدارة العامة",
@@ -119,7 +118,7 @@ function loadDB(): DBState {
       if (!parsed.users) {
         parsed.users = JSON.parse(JSON.stringify(PRESET_USERS));
       }
-       if (!parsed.locations) {
+      if (!parsed.locations) {
         parsed.locations = [...PRESET_LOCATIONS];
       }
       return parsed;
@@ -127,7 +126,7 @@ function loadDB(): DBState {
   } catch (err) {
     console.error("Error reading database file, using fallback", err);
   }
-   return { 
+  return { 
     tickets: [], 
     chatMessages: [], 
     users: JSON.parse(JSON.stringify(PRESET_USERS)),
@@ -149,17 +148,21 @@ let isMySQLConnected = false;
 
 if (process.env.DB_HOST && process.env.DB_HOST.trim() !== "") {
   try {
+    const host = process.env.DB_HOST.trim();
+    const useSSL = process.env.DB_SSL === "true" || (!host.includes("localhost") && !host.includes("127.0.0.1"));
+    
     pool = mysql.createPool({
-      host: process.env.DB_HOST.trim(),
+      host: host,
       user: process.env.DB_USER || "root",
       password: process.env.DB_PASSWORD || "",
       database: process.env.DB_NAME || "khalifa_helpdesk",
       port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
       waitForConnections: true,
       connectionLimit: 15,
-      queueLimit: 0
+      queueLimit: 0,
+      ssl: useSSL ? { rejectUnauthorized: false } : undefined
     });
-    console.log("[Helpdesk Server] MySQL connection pool initialized.");
+    console.log(`[Helpdesk Server] MySQL connection pool initialized (Host: ${host}, Port: ${process.env.DB_PORT || 3306}, SSL: ${useSSL ? "Active" : "Inactive"}).`);
   } catch (err) {
     console.warn("[Helpdesk Server] Failed to initialize MySQL Pool, using fallback:", err);
   }
@@ -272,7 +275,6 @@ async function initializeDatabase() {
       );
     }
 
-    
     // Create locations table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS locations (
@@ -290,12 +292,11 @@ async function initializeDatabase() {
       }
     }
 
-
-    
     isMySQLConnected = true;
     connection.release();
     console.log("[Helpdesk Server] MySQL Database initialized successfully and tables verified.");
   } catch (err) {
+    console.error("[Helpdesk Server] MySQL Initialization/Connection Error Details:", err);
     console.warn("[Helpdesk Server] Operating in local JSON fallback mode because MySQL is not active/configured in this environment.");
     isMySQLConnected = false;
   }
@@ -317,8 +318,6 @@ async function getLocationsFromDB(): Promise<string[]> {
   return db.locations || PRESET_LOCATIONS;
 }
 
-
-// Database Operations Layer (Transparent switcher)
 async function getTicketsFromDB(): Promise<any[]> {
   if (isMySQLConnected && pool) {
     try {
@@ -933,7 +932,11 @@ async function startServer() {
     }
   });
 
-  
+  // --- Database Status API ---
+  app.get("/api/db-status", (req, res) => {
+    res.json({ isMySQLConnected });
+  });
+
   // --- Locations API Endpoints ---
   app.get("/api/locations", async (req, res) => {
     try {
