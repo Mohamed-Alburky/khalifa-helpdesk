@@ -6,6 +6,7 @@ import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 // Load environment variables
 dotenv.config();
@@ -626,12 +627,15 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
         user: gmailUser,
         pass: gmailPass,
-      },
-    });
+    },
+    family: 4
+} as SMTPTransport.Options);
 
     const subject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
