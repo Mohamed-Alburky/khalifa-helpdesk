@@ -626,16 +626,18 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
+     const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // true for 465, false for other ports (587 uses STARTTLS)
+      auth: {
         user: gmailUser,
         pass: gmailPass,
-    },
-    family: 4
-} as SMTPTransport.Options);
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
 
     const subject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
