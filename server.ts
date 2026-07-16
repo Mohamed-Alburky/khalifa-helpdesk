@@ -580,15 +580,16 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
   try {
     const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // استخدام منفذ 587 مع بروتوكول STARTTLS
+  port: 587,
+  secure: false, // استخدام منفذ 587 مع بروتوكول STARTTLS
   auth: {
     user: gmailUser,
     pass: gmailPass,
   },
-  family: 4
- 
-}as SMTPTransport.Options);
+  tls: {
+    rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
+  }
+});
 
     const subject = "🔐 رمز التحقق لإعادة تعيين كلمة المرور - نظام الدعم الفني لمجموعة خليفة القابضة";
 
@@ -635,14 +636,16 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
   try {
      const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // استخدام منفذ 587 مع بروتوكول STARTTLS
+  port: 587,
+  secure: false, // استخدام منفذ 587 مع بروتوكول STARTTLS
   auth: {
     user: gmailUser,
     pass: gmailPass,
   },
-  family: 4
-  }as SMTPTransport.Options);
+  tls: {
+    rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
+  }
+});
 
     const subject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
