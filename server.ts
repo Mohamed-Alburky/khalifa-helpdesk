@@ -573,8 +573,7 @@ async function deleteEngineerFromDB(id: string): Promise<void> {
 }
 
 async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code: string) {
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_PASS;
+
 
   if (!resendClient) {
     console.log(`[Resend OTP Mock] RESEND_API_KEY not configured. To: ${toEmail}, OTP: ${code}`);
@@ -673,7 +672,7 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
     console.log(`[Resend Alert] Successfully sent Email to ${toEmail}. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Resend Alert] Failed to send email to ${toEmail}:`, err);
+    console.error(`[Email Alert] Failed to send email to ${toEmail}:`, err);
   }
 }
 
