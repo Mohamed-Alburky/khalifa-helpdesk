@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import dns from "dns";
 
@@ -13,6 +13,10 @@ dns.setDefaultResultOrder("ipv4first");
 
 // Load environment variables
 dotenv.config();
+
+
+const resendApiKey = process.env.RESEND_API_KEY;
+const resendClient = resendApiKey ? new Resend(resendApiKey) : null;
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const DB_FILE = path.join(process.cwd(), "db.json");
@@ -572,30 +576,13 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_PASS;
 
-  if (!gmailUser || !gmailPass) {
-    console.log(`[Email OTP Mock] GMAIL_USER/GMAIL_PASS not configured. To: ${toEmail}, OTP: ${code}`);
+  if (!resendClient) {
+    console.log(`[Resend OTP Mock] RESEND_API_KEY not configured. To: ${toEmail}, OTP: ${code}`);
     return;
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // استخدام منفذ 587 مع بروتوكول STARTTLS
-  auth: {
-    user: gmailUser,
-    pass: gmailPass,
-  },
-  tls: {
-    rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
-  },
-  connectionTimeout: 10000, // مهلة الاتصال 10 ثوانٍ
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-  lookup: (hostname: any, options: any, callback: any) => {
-    dns.lookup(hostname, { family: 4 }, callback); // إجبار استخدام IPv4
-  }
-});
+    
 
     const subject = "🔐 رمز التحقق لإعادة تعيين كلمة المرور - نظام الدعم الفني لمجموعة خليفة القابضة";
 
@@ -616,17 +603,22 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
       </div>
     `;
 
-    await transporter.sendMail({
-      from: `"بوابة الحماية - مجموعة خليفة" <${gmailUser}>`,
+    const response = await resendClient.emails.sendMail({
+      from:"onboarding@resend.dev",
       to: toEmail,
       subject: subject,
       text: `رمز التحقق الخاص بك هو: ${code}`,
       html: htmlContent,
     });
 
-    console.log(`[Email OTP] Successfully sent to ${toEmail}`);
+    if (response.error) {
+      throw new Error(JSON.stringify(response.error));
+    }
+
+
+    console.log(`[Resend OTP] Successfully sent email to ${toEmail}. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Email OTP] Failed to send email to ${toEmail}:`, err);
+    console.error(`[Resend OTP] Failed to send email to ${toEmail}:`, err);
   }
 }
 
@@ -634,30 +626,13 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_PASS;
 
-  if (!gmailUser || !gmailPass) {
-    console.log(`[Email Alert Mock] GMAIL_USER/GMAIL_PASS not configured. To: ${toEmail}, User: ${userName}, Activation: ${isActivation}`);
+  if (!resendClient) {
+    console.log(`[Resend Alert Mock] RESEND_API_KEY not configured. To: ${toEmail}, User: ${userName}, Activation: ${isActivation}`);
     return;
   }
 
   try {
-     const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // استخدام منفذ 587 مع بروتوكول STARTTLS
-  auth: {
-    user: gmailUser,
-    pass: gmailPass,
-  },
-  tls: {
-    rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
-  },
-  connectionTimeout: 10000, // مهلة الاتصال 10 ثوانٍ
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-  lookup: (hostname: any, options: any, callback: any) => {
-    dns.lookup(hostname, { family: 4 }, callback); // إجبار استخدام IPv4
-  }
-});
+     
 
     const subject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
@@ -683,17 +658,22 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
           <p style="font-size: 13px; color: #e11d48; font-weight: bold; margin-top: 15px;">إذا لم تكن أنت من قام بالدخول، يرجى إعادة تعيين كلمة المرور الخاصة بك فوراً.</p>
         </div>`;
 
-    await transporter.sendMail({
-      from: `"مجموعة خليفة القابضة" <${gmailUser}>`,
+    const response = await resendClient.emails.sendMail({
+      from: "onboarding@resend.dev",
       to: toEmail,
       subject: subject,
       text: textContent,
       html: htmlContent,
     });
 
-    console.log(`[Email Alert] Successfully sent to ${toEmail}`);
+    if (response.error) {
+      throw new Error(JSON.stringify(response.error));
+    }
+
+
+    console.log(`[Resend Alert] Successfully sent Email to ${toEmail}. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Email Alert] Failed to send email to ${toEmail}:`, err);
+    console.error(`[Resend Alert] Failed to send email to ${toEmail}:`, err);
   }
 }
 
