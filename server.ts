@@ -602,7 +602,7 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
       </div>
     `;
 
-    const response = await resendClient.emails.sendMail({
+    const response = await resendClient.emails.send({
       from:"onboarding@resend.dev",
       to: toEmail,
       subject: subject,
@@ -657,7 +657,7 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
           <p style="font-size: 13px; color: #e11d48; font-weight: bold; margin-top: 15px;">إذا لم تكن أنت من قام بالدخول، يرجى إعادة تعيين كلمة المرور الخاصة بك فوراً.</p>
         </div>`;
 
-    const response = await resendClient.emails.sendMail({
+    const response = await resendClient.emails.send({
       from: "onboarding@resend.dev",
       to: toEmail,
       subject: subject,
