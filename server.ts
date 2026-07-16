@@ -588,6 +588,12 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
   },
   tls: {
     rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
+  },
+  connectionTimeout: 10000, // مهلة الاتصال 10 ثوانٍ
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+  lookup: (hostname: any, options: any, callback: any) => {
+    dns.lookup(hostname, { family: 4 }, callback); // إجبار استخدام IPv4
   }
 });
 
@@ -644,6 +650,12 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
   },
   tls: {
     rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
+  },
+  connectionTimeout: 10000, // مهلة الاتصال 10 ثوانٍ
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+  lookup: (hostname: any, options: any, callback: any) => {
+    dns.lookup(hostname, { family: 4 }, callback); // إجبار استخدام IPv4
   }
 });
 
