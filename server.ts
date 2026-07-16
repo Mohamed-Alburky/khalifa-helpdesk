@@ -7,6 +7,9 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import dns from "dns";
+
+dns.setDefaultResultOrder("ipv4first");
 
 // Load environment variables
 dotenv.config();
@@ -627,17 +630,17 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
   try {
      const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false, // true for 465, false for other ports (587 uses STARTTLS)
-      auth: {
-        user: gmailUser,
-        pass: gmailPass,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // استخدام منفذ 587 مع بروتوكول STARTTLS
+  auth: {
+    user: gmailUser,
+    pass: gmailPass,
+  },
+  tls: {
+    rejectUnauthorized: false // لمنع حظر الاتصال بسبب شهادات الأمان المحلية
+  }
+});
 
     const subject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
