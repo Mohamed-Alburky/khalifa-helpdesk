@@ -604,7 +604,7 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
 
     const response = await resendClient.emails.send({
       from:"onboarding@resend.dev",
-      to: toEmail,
+      to: Email,
       subject: subject,
       text: `رمز التحقق الخاص بك هو: ${code}`,
       html: htmlContent,
@@ -659,7 +659,7 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
     const response = await resendClient.emails.send({
       from: "onboarding@resend.dev",
-      to: toEmail,
+      to: Email,
       subject: subject,
       text: textContent,
       html: htmlContent,
