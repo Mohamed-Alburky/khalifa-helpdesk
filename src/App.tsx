@@ -425,21 +425,39 @@ export default function App() {
       console.log('[Socket] Connected to server. ID:', socket.id);
     });
 
-    socket.on('newTicket', (ticket) => {
-      console.log('[Socket] Event: newTicket', ticket);
+   const handleNewTicket = (ticket: Ticket) => {
+      console.log('[Socket] Event: ticketCreated/newTicket', ticket);
+      // Avoid duplicate entries in the array
+      setTickets((prev) => {
+        if (prev.some((t) => t.id === ticket.id)) return prev;
+        return [ticket, ...prev];
+      });
+      // Background fetch to ensure fully synchronized state
       fetchTickets();
       if (currentUser.role === 'admin') {
         fetchReports();
       }
-    });
+    };
 
-    socket.on('updateTicket', (updatedTicket) => {
-      console.log('[Socket] Event: updateTicket', updatedTicket);
+     socket.on('newTicket', handleNewTicket);
+    socket.on('ticketCreated', handleNewTicket);
+
+    const handleTicketUpdated = (updatedTicket: Ticket) => {
+      console.log('[Socket] Event: ticketUpdated/updateTicket/ticketCompleted', updatedTicket);
+      // Immediately update local array
+      setTickets((prev) =>
+        prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t))
+      );
+      // Background fetch
       fetchTickets();
       if (currentUser.role === 'admin') {
         fetchReports();
       }
-    });
+   };
+
+    socket.on('updateTicket', handleTicketUpdated);
+    socket.on('ticketUpdated', handleTicketUpdated);
+    socket.on('ticketCompleted', handleTicketUpdated);
 
     socket.on('newChatMessage', (message) => {
       console.log('[Socket] Event: newChatMessage', message);

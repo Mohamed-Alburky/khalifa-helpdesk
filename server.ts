@@ -1051,6 +1051,7 @@ async function startServer() {
     const ioServer = req.app.get("io") as Server;
     if (ioServer) {
       ioServer.emit("newTicket", ticket);
+      ioServer.emit("ticketCreated", ticket);
     }
 
     res.json({ success: true, ticket });
@@ -1077,6 +1078,11 @@ async function startServer() {
     const ioServer = req.app.get("io") as Server;
     if (ioServer) {
       ioServer.emit("updateTicket", updatedTicket);
+         ioServer.emit("ticketUpdated", updatedTicket);
+
+      if (updatedTicket && (updatedTicket.status === "resolved" || updatedTicket.status === "closed")) {
+        ioServer.emit("ticketCompleted", updatedTicket);
+      }
     }
 
     res.json({ success: true, ticket: updatedTicket });
