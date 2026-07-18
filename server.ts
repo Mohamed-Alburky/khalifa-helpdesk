@@ -8,6 +8,8 @@ import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import dns from "dns";
+import http from "http";
+import { Server } from "socket.io";
 
 dns.setDefaultResultOrder("ipv4first");
 
@@ -718,6 +720,26 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: "50mb" }));
 
+  
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"],
+      credentials: true
+    }
+  });
+
+  io.on("connection", (socket) => {
+    console.log(`[Socket] A user connected: ${socket.id}`);
+    
+    socket.on("disconnect", () => {
+      console.log(`[Socket] User disconnected: ${socket.id}`);
+    });
+  });
+
+  app.set("io", io);
+
   // --- API Endpoints ---
 
   // 1. Login with database match system (Name, ID, and Email matching/verification with Activation and Password security)
@@ -1025,6 +1047,12 @@ async function startServer() {
     }
 
     await saveTicketToDB(ticket);
+       
+    const ioServer = req.app.get("io") as Server;
+    if (ioServer) {
+      ioServer.emit("newTicket", ticket);
+    }
+
     res.json({ success: true, ticket });
   });
 
@@ -1045,6 +1073,11 @@ async function startServer() {
     // Get updated ticket
     const updatedTickets = await getTicketsFromDB();
     const updatedTicket = updatedTickets.find((t) => t.id === id);
+    
+    const ioServer = req.app.get("io") as Server;
+    if (ioServer) {
+      ioServer.emit("updateTicket", updatedTicket);
+    }
 
     res.json({ success: true, ticket: updatedTicket });
   });
@@ -1064,6 +1097,13 @@ async function startServer() {
     }
 
     await saveChatMessageToDB(message);
+
+    
+    const ioServer = req.app.get("io") as Server;
+    if (ioServer) {
+      ioServer.emit("newChatMessage", message);
+    }
+
     res.json({ success: true, message });
   });
 
@@ -1181,7 +1221,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`[Helpdesk Server] running on http://localhost:${PORT}`);
   });
 }

@@ -45,6 +45,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
+import { io } from 'socket.io-client';
 import { User as UserType, Ticket, ChatMessage, UserRole, TicketStatus } from './types';
 import { LOCATIONS, PROBLEM_HIERARCHY } from './initialData';
 import EngineerManagementSection from './components/EngineerManagementSection';
@@ -406,6 +407,56 @@ export default function App() {
       }
     };
   }, [chatInputText, activeChatTicketId, currentUser]);
+  
+  // --- Real-time updates via Socket.io ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Connect dynamically to the API server or relative path
+    const socketUrl = API_BASE_URL || undefined;
+    console.log('[Socket] Initializing connection to:', socketUrl || 'same origin');
+
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true
+    });
+
+    socket.on('connect', () => {
+      console.log('[Socket] Connected to server. ID:', socket.id);
+    });
+
+    socket.on('newTicket', (ticket) => {
+      console.log('[Socket] Event: newTicket', ticket);
+      fetchTickets();
+      if (currentUser.role === 'admin') {
+        fetchReports();
+      }
+    });
+
+    socket.on('updateTicket', (updatedTicket) => {
+      console.log('[Socket] Event: updateTicket', updatedTicket);
+      fetchTickets();
+      if (currentUser.role === 'admin') {
+        fetchReports();
+      }
+    });
+
+    socket.on('newChatMessage', (message) => {
+      console.log('[Socket] Event: newChatMessage', message);
+      if (activeChatTicketId && message.ticketId === activeChatTicketId) {
+        fetchChat(activeChatTicketId);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('[Socket] Disconnected from server');
+    });
+
+    return () => {
+      console.log('[Socket] Cleaning up connection');
+      socket.disconnect();
+    };
+  }, [currentUser, activeChatTicketId]);
 
   // Periodic polling for tickets and reports
   useEffect(() => {
