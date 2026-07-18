@@ -407,6 +407,13 @@ export default function App() {
       }
     };
   }, [chatInputText, activeChatTicketId, currentUser]);
+
+  
+  // Keep activeChatTicketId in a ref to avoid reconnecting Socket.io on every chat ticket switch
+  const activeChatTicketIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeChatTicketIdRef.current = activeChatTicketId;
+  }, [activeChatTicketId]);
   
   // --- Real-time updates via Socket.io ---
   useEffect(() => {
@@ -426,56 +433,60 @@ export default function App() {
     });
 
    const handleNewTicket = (ticket: Ticket) => {
-      console.log('[Socket] Event: ticketCreated/newTicket', ticket);
+      console.log('[Socket] Event: ticketCreated/newTicket (Optimized state update)', ticket);
       // Avoid duplicate entries in the array
       setTickets((prev) => {
         if (prev.some((t) => t.id === ticket.id)) return prev;
         return [ticket, ...prev];
       });
-      // Background fetch to ensure fully synchronized state
-      fetchTickets();
-      if (currentUser.role === 'admin') {
-        fetchReports();
-      }
+     
     };
 
-     socket.on('newTicket', handleNewTicket);
-    socket.on('ticketCreated', handleNewTicket);
-
+    
     const handleTicketUpdated = (updatedTicket: Ticket) => {
-      console.log('[Socket] Event: ticketUpdated/updateTicket/ticketCompleted', updatedTicket);
+      console.log('[Socket] Event: ticketUpdated/ticketCompleted (Optimized state update)', updatedTicket);
       // Immediately update local array
       setTickets((prev) =>
         prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t))
       );
-      // Background fetch
-      fetchTickets();
-      if (currentUser.role === 'admin') {
-        fetchReports();
+      
+     };
+
+    const handleNewChatMessage = (message: ChatMessage) => {
+      console.log('[Socket] Event: newChatMessage (Optimized state update)', message);
+      if (activeChatTicketIdRef.current && message.ticketId === activeChatTicketIdRef.current) {
+        setChatMessages((prev) => {
+          if (prev.some((m) => m.id === message.id)) return prev;
+          return [...prev, message];
+        });
       }
    };
 
+    socket.on('newTicket', handleNewTicket);
+    socket.on('ticketCreated', handleNewTicket);
     socket.on('updateTicket', handleTicketUpdated);
     socket.on('ticketUpdated', handleTicketUpdated);
     socket.on('ticketCompleted', handleTicketUpdated);
 
-    socket.on('newChatMessage', (message) => {
-      console.log('[Socket] Event: newChatMessage', message);
-      if (activeChatTicketId && message.ticketId === activeChatTicketId) {
-        fetchChat(activeChatTicketId);
-      }
-      fetchTickets();
-    });
+    socket.on('newChatMessage', handleNewChatMessage);
 
     socket.on('disconnect', () => {
       console.log('[Socket] Disconnected from server');
     });
 
     return () => {
-      console.log('[Socket] Cleaning up connection');
+      console.log('[Socket] Cleaning up connection and removing listeners');
+      socket.off('newTicket', handleNewTicket);
+      socket.off('ticketCreated', handleNewTicket);
+      socket.off('updateTicket', handleTicketUpdated);
+      socket.off('ticketUpdated', handleTicketUpdated);
+      socket.off('ticketCompleted', handleTicketUpdated);
+      socket.off('newChatMessage', handleNewChatMessage);
+      socket.off('connect');
+      socket.off('disconnect');
       socket.disconnect();
     };
-  }, [currentUser, activeChatTicketId]);
+  }, [currentUser?.id]);
 
   // Periodic polling for tickets and reports
   useEffect(() => {
