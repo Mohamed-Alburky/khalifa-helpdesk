@@ -23,15 +23,12 @@ const DB_FILE = path.join(process.cwd(), "db.json");
 
 // Predefined locations
 const PRESET_LOCATIONS = [
-  "HQ Management Building - مبنى الإدارة العامة",
-  "IT & Data Center - مركز البيانات بتقنية المعلومات",
-  "Ground Floor Offices - مكاتب الطابق الأرضي",
-  "First Floor Offices - مكاتب الطابق الأول",
-  "Second Floor Offices - مكاتب الطابق الثاني",
-  "Third Floor Offices - مكاتب الطابق الثالث",
-  "Group Main Warehouses - مجمع مستودعات المجموعة",
-  "Jeddah Regional Office - فرع جدة الإقليمي",
-  "Dammam Regional Office - فرع الدمام الإقليمي"
+  "  مبنى الإدارة العامة",
+  " مركز البيانات بتقنية المعلومات",
+  " سيدي فرج",
+  " مخزن خليفة القابضة الزئيسي",
+ 
+  "  البوسكو"
 ];
 
 // Predefined users for match validation
@@ -583,7 +580,9 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
   try {
     
 
-    const subject = "🔐 رمز التحقق لإعادة تعيين كلمة المرور - نظام الدعم الفني لمجموعة خليفة القابضة";
+    const originalSubject = "🔐 رمز التحقق لإعادة تعيين كلمة المرور - نظام الدعم الفني لمجموعة خليفة القابضة";
+    const subject = `[Test Mode] Password Reset for ${toEmail} - ${originalSubject}`;
+
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #f8fafc; max-width: 500px; margin: 0 auto;">
@@ -604,7 +603,7 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
 
     const response = await resendClient.emails.send({
       from:"onboarding@resend.dev",
-      to: Email,
+      to: "albrkyhmady3@gmail.com",
       subject: subject,
       text: `رمز التحقق الخاص بك هو: ${code}`,
       html: htmlContent,
@@ -615,9 +614,9 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
     }
 
 
-    console.log(`[Resend OTP] Successfully sent email to ${toEmail}. ID: ${response.data?.id}`);
+    console.log(`[Resend OTP] Successfully sent email for ${toEmail} to albrkyhmady3@gmail.com. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Resend OTP] Failed to send email to ${toEmail}:`, err);
+    console.error(`[Resend OTP] Failed to send email for ${toEmail} to albrkyhmady3@gmail.com:`, err);
   }
 }
 
@@ -633,9 +632,10 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
   try {
      
 
-    const subject = isActivation 
+    const originalSubject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
       : "🛡️ تنبيه دخول جديد - نظام الدعم الفني لمجموعة خليفة القابضة";
+       const subject = `[Test Mode] ${isActivation ? "Activation" : "Login Alert"} for ${toEmail} - ${originalSubject}`;
 
     const textContent = isActivation
       ? `عزيزنا الموظف ${userName}،\n\nتم تفعيل حسابك بنجاح وتعيين كلمة المرور الخاصة بك في نظام الدعم الفني لمجموعة خليفة القابضة.\nإذا لم تقم بهذا الإجراء بنفسك، يرجى التواصل مع إدارة تكنولوجيا المعلومات فوراً.\n\nرابط إعادة تعيين كلمة المرور مستقبلاً:\nhttps://ais-dev-ur7e5mvcj6vfbv32opf7om-473752403391.europe-west2.run.app/ (عبر البوابة)`
@@ -659,7 +659,7 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
     const response = await resendClient.emails.send({
       from: "onboarding@resend.dev",
-      to: Email,
+      to:"albrkyhmady3@gmail.com",
       subject: subject,
       text: textContent,
       html: htmlContent,
@@ -670,9 +670,9 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
     }
 
 
-    console.log(`[Resend Alert] Successfully sent Email to ${toEmail}. ID: ${response.data?.id}`);
+    console.log(`[Resend Alert] Successfully sent Email for ${toEmail} to albrkyhmady3@gmail.com. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Email Alert] Failed to send email to ${toEmail}:`, err);
+    console.error(`[Email Alert] Failed to send email for ${toEmail} to albrkyhmady3@gmail.com:`, err);
   }
 }
 
@@ -756,7 +756,7 @@ async function startServer() {
         await updateUserPasswordInDB(normalizedId, normalizedEmail, hashedPassword);
         
         // Send email alert (non-blocking)
-        sendLoginAlertEmail(normalizedEmail, matchedUser.name || matchedUser.full_name, true).catch(err => {
+        sendLoginAlertEmail(matchedUser.email, matchedUser.name || matchedUser.full_name, true).catch(err => {
           console.error("Failed to send activation email:", err);
         });
 
@@ -792,7 +792,7 @@ async function startServer() {
       }
 
       // Send email alert (non-blocking)
-      sendLoginAlertEmail(normalizedEmail, matchedUser.name || matchedUser.full_name, false).catch(err => {
+      sendLoginAlertEmail(matchedUser.email, matchedUser.name || matchedUser.full_name, false).catch(err => {
         console.error("Failed to send login alert email:", err);
       });
 
@@ -834,13 +834,12 @@ async function startServer() {
     };
 
     // Send verification email (non-blocking)
-    sendPasswordResetOTPEmail(normalizedEmail, matchedUser.name || matchedUser.full_name, code).catch(err => {
+    sendPasswordResetOTPEmail(matchedUser.email, matchedUser.name || matchedUser.full_name, code).catch(err => {
       console.error("Failed to send reset OTP email:", err);
     });
 
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPass = process.env.GMAIL_PASS;
-    const isMock = !gmailUser || !gmailPass;
+    
+    const isMock = !resendClient;
 
     return res.json({
       success: true,
@@ -894,7 +893,7 @@ async function startServer() {
     delete resetCodes[normalizedId];
 
     // Send confirmation email alert (non-blocking)
-    sendLoginAlertEmail(normalizedEmail, matchedUser.name || matchedUser.full_name, true).catch(err => {
+    sendLoginAlertEmail(matchedUser.email, matchedUser.name || matchedUser.full_name, true).catch(err => {
       console.error("Failed to send activation email:", err);
     });
 
