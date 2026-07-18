@@ -413,7 +413,7 @@ export default function App() {
     if (!currentUser) return;
 
     // Connect dynamically to the API server or relative path
-    const socketUrl = API_BASE_URL || undefined;
+    const socketUrl = API_BASE_URL || window.location.origin;
     console.log('[Socket] Initializing connection to:', socketUrl || 'same origin');
 
     const socket = io(socketUrl, {
@@ -446,6 +446,7 @@ export default function App() {
       if (activeChatTicketId && message.ticketId === activeChatTicketId) {
         fetchChat(activeChatTicketId);
       }
+      fetchTickets();
     });
 
     socket.on('disconnect', () => {
