@@ -209,6 +209,12 @@ export default function App() {
   const [createError, setCreateError] = useState('');
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
 
+  
+  // --- Action Loading States ---
+  const [isTakingTicket, setIsTakingTicket] = useState<Record<string, boolean>>({});
+  const [isResolvingTicket, setIsResolvingTicket] = useState(false);
+  const [isRatingLoading, setIsRatingLoading] = useState(false);
+
   // --- Chat and Filters ---
   const [activeChatTicketId, setActiveChatTicketId] = useState<string | null>(null);
   const [chatInputText, setChatInputText] = useState('');
@@ -967,10 +973,11 @@ export default function App() {
     }
   };
 
-  // Take Ticket by Engineer
+  // Take Ticket by Engineer - Handled with Loading State
   const handleTakeTicket = async (ticketId: string) => {
     if (!currentUser || currentUser.role !== 'engineer') return;
-
+   
+    setIsTakingTicket(prev => ({ ...prev, [ticketId]: true }));
     const currentTime = getEnglishTimestamp();
 
     try {
@@ -1022,6 +1029,8 @@ export default function App() {
     } catch (e: any) {
       console.error("Error claiming ticket", e);
       alert(`خطأ بالشبكة عند محاولة استلام التذكرة: ${e.message || e}`);
+        } finally {
+      setIsTakingTicket(prev => ({ ...prev, [ticketId]: false }));
     }
   };
 
@@ -1035,6 +1044,7 @@ export default function App() {
       return;
     }
 
+     setIsResolvingTicket(true);
     const currentTime = getEnglishTimestamp();
 
     try {
@@ -1076,6 +1086,8 @@ export default function App() {
       }
     } catch (e) {
       console.error("Error resolving ticket", e);
+       } finally {
+      setIsResolvingTicket(false);
     }
   };
 
@@ -1084,6 +1096,7 @@ export default function App() {
     e.preventDefault();
     if (!currentUser || !ratingTicketId) return;
 
+    setIsRatingLoading(true);
     try {
       const updates = {
         rating: ratingStars,
@@ -1106,6 +1119,8 @@ export default function App() {
       }
     } catch (e) {
       console.error("Error rating ticket", e);
+       } finally {
+      setIsRatingLoading(false);
     }
   };
 
@@ -2337,9 +2352,17 @@ export default function App() {
                         <div className="flex gap-2">
                           <button 
                             type="submit"
-                            className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-2 px-3 rounded-lg shadow cursor-pointer text-center"
-                          >
-                            تأكيد إنهاء وحل المشكلة
+                             disabled={isResolvingTicket}
+                            className="flex-1 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-400 text-white text-xs font-bold py-2 px-3 rounded-lg shadow cursor-pointer disabled:cursor-not-allowed text-center flex items-center justify-center gap-1.5"
+                          > {isResolvingTicket ? (
+                              <>
+                                <span className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></span>
+                                جاري تسجيل الحل...
+                              </>
+                            ) : (
+                              "تأكيد إنهاء وحل المشكلة"
+                            )}
+                           
                           </button>
                           <button 
                             type="button"
@@ -2899,10 +2922,19 @@ export default function App() {
                 <div className="flex gap-3">
                   <button 
                     type="submit"
-                    className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2.5 px-4 rounded-xl text-xs shadow transition-all cursor-pointer"
+                    disabled={isRatingLoading}
+                    className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-slate-950 disabled:text-slate-500 font-bold py-2.5 px-4 rounded-xl text-xs shadow transition-all cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                   >
-                    تأكيد التقييم وإغلاق البطاقة نهائياً
-                  </button>
+                    {isRatingLoading ? (
+                      <>
+                        <span className="inline-block animate-spin rounded-full h-3 w-3 border-2 border-slate-950 border-t-transparent"></span>
+                        جاري تقديم التقييم...
+                      </>
+                    ) : (
+                      "تأكيد التقييم وإغلاق البطاقة نهائياً"
+                    )}
+                    
+                   </button>
                   <button 
                     type="button"
                     onClick={() => setRatingTicketId(null)}
@@ -2916,7 +2948,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- Password Reset Modal --- */}
+       {/* --- Password Reset Modal --- */}
         {showResetModal && (
           <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-[fadeIn_0.2s_ease-out]">
             <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100 relative text-right">

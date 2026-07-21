@@ -10,11 +10,24 @@ import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import dns from "dns";
 import http from "http";
 import { Server } from "socket.io";
+import { rateLimit } from "express-rate-limit";
 
 dns.setDefaultResultOrder("ipv4first");
 
 // Load environment variables
 dotenv.config();
+
+
+// Rate limiting configuration to prevent spam/abuse, optimized for Render free-tier hosting limits
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 10, // maximum of 10 requests per minute from a single IP
+  standardHeaders: true, // Return rate limit info in standard headers
+  legacyHeaders: false, // Disable X-RateLimit-* headers
+  message: {
+    error: "لقد تجاوزت الحد المسموح به من الطلبات. يرجى المحاولة بعد دقيقة واحدة لتجنب العبء على النظام."
+  }
+});
 
 
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -742,8 +755,8 @@ async function startServer() {
 
   // --- API Endpoints ---
 
-  // 1. Login with database match system (Name, ID, and Email matching/verification with Activation and Password security)
-  app.post("/api/login", async (req, res) => {
+  // 1. Login with database match system (Name, ID, and Email matching/verification with Activation and Password security) - Apply rate limiter
+  app.post("/api/login", apiLimiter, async (req, res) => {
     const { name, id, email, password, newPassword } = req.body;
     if (!name || !id || !email) {
       return res.status(400).json({ error: "يرجى إدخال الاسم، الرقم الوظيفي، والبريد الإلكتروني للتحقق." });
@@ -832,8 +845,8 @@ async function startServer() {
     }
   });
 
-  // 1.5 Password Reset API Endpoints with Email verification (OTP)
-  app.post("/api/reset-password/request", async (req, res) => {
+  // 1.5 Password Reset API Endpoints with Email verification (OTP) - Apply rate limiter
+  app.post("/api/reset-password/request", apiLimiter, async (req, res) => {
     const { id, email } = req.body;
     if (!id || !email) {
       return res.status(400).json({ error: "يرجى توفير الرقم الوظيفي والبريد الإلكتروني للتحقق." });
@@ -871,7 +884,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/reset-password/confirm", async (req, res) => {
+  app.post("/api/reset-password/confirm", apiLimiter, async (req, res) => {
     const { id, email, code, newPassword } = req.body;
     if (!id || !email || !code || !newPassword) {
       return res.status(400).json({ error: "يرجى تعبئة كافة الحقول بما في ذلك رمز التحقق وكلمة المرور الجديدة." });
@@ -1027,7 +1040,7 @@ async function startServer() {
   });
 
   // 3. Create a ticket (Strict check: one active ticket per employee)
-  app.post("/api/tickets", async (req, res) => {
+  app.post("/api/tickets", apiLimiter, async (req, res) => {
     const { ticket } = req.body;
     if (!ticket) {
       return res.status(400).json({ error: "بيانات التذكرة غير مكتملة." });
