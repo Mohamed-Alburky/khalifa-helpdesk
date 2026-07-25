@@ -6,17 +6,17 @@ import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
 import dns from "dns";
 import http from "http";
 import { Server } from "socket.io";
 import { rateLimit } from "express-rate-limit";
+import { odooService } from "./services/odooService";
 
+// Prefer IPv4 over IPv6 to resolve ENETUNREACH/timeout issues on environments like Render that lack IPv6 outbound support
 dns.setDefaultResultOrder("ipv4first");
 
 // Load environment variables
 dotenv.config();
-
 
 // Rate limiting configuration to prevent spam/abuse, optimized for Render free-tier hosting limits
 const apiLimiter = rateLimit({
@@ -29,7 +29,6 @@ const apiLimiter = rateLimit({
   }
 });
 
-
 const resendApiKey = process.env.RESEND_API_KEY;
 const resendClient = resendApiKey ? new Resend(resendApiKey) : null;
 
@@ -38,12 +37,15 @@ const DB_FILE = path.join(process.cwd(), "db.json");
 
 // Predefined locations
 const PRESET_LOCATIONS = [
-  "  مبنى الإدارة العامة",
-  " مركز البيانات بتقنية المعلومات",
-  " سيدي فرج",
-  " مخزن خليفة القابضة الزئيسي",
- 
-  "  البوسكو"
+  "HQ Management Building - مبنى الإدارة العامة",
+  "IT & Data Center - مركز البيانات بتقنية المعلومات",
+  "Ground Floor Offices - مكاتب الطابق الأرضي",
+  "First Floor Offices - مكاتب الطابق الأول",
+  "Second Floor Offices - مكاتب الطابق الثاني",
+  "Third Floor Offices - مكاتب الطابق الثالث",
+  "Group Main Warehouses - مجمع مستودعات المجموعة",
+  "Jeddah Regional Office - فرع جدة الإقليمي",
+  "Dammam Regional Office - فرع الدمام الإقليمي"
 ];
 
 // Predefined users for match validation
@@ -166,28 +168,38 @@ function saveDB(state: DBState) {
 let pool: mysql.Pool | null = null;
 let isMySQLConnected = false;
 
-if (process.env.DB_HOST && process.env.DB_HOST.trim() !== "") {
+const dbHost = (process.env.DATABASE_HOST || process.env.DB_HOST || "").trim();
+let dbPort = 3306; // Default fallback port
+const portEnv = process.env.DATABASE_PORT || process.env.DB_PORT;
+if (portEnv) {
+  dbPort = parseInt(portEnv);
+} else if (dbHost.includes("aiven")) {
+  dbPort = 20841; // Aiven default port
+}
+
+if (dbHost !== "") {
   try {
-    const host = process.env.DB_HOST.trim();
-    const useSSL = process.env.DB_SSL === "true" || (!host.includes("localhost") && !host.includes("127.0.0.1"));
-    
+    const dbUser = process.env.DATABASE_USER || process.env.DB_USER || "root";
+    const dbPassword = process.env.DATABASE_PASSWORD || process.env.DB_PASSWORD || "";
+    const dbName = process.env.DATABASE_NAME || process.env.DB_NAME || "khalifa_helpdesk";
+
     pool = mysql.createPool({
-      host: host,
-      user: process.env.DB_USER || "root",
-      password: process.env.DB_PASSWORD || "",
-      database: process.env.DB_NAME || "khalifa_helpdesk",
-      port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
+      host: dbHost,
+      user: dbUser,
+      password: dbPassword,
+      database: dbName,
+      port: dbPort,
       waitForConnections: true,
-      connectionLimit: 15,
+      connectionLimit: 10, // Optimized limit for Aiven/Render free tier databases to prevent limit exhaustion
       queueLimit: 0,
-      ssl: useSSL ? { rejectUnauthorized: false } : undefined
+      ssl: { rejectUnauthorized: false }
     });
-    console.log(`[Helpdesk Server] MySQL connection pool initialized (Host: ${host}, Port: ${process.env.DB_PORT || 3306}, SSL: ${useSSL ? "Active" : "Inactive"}).`);
+    console.log(`[Helpdesk Server] MySQL connection pool initialized (Host: ${dbHost}, Port: ${dbPort}, Database: ${dbName}, SSL: Active).`);
   } catch (err) {
     console.warn("[Helpdesk Server] Failed to initialize MySQL Pool, using fallback:", err);
   }
 } else {
-  console.log("[Helpdesk Server] DB_HOST is not set or empty. Operating in local JSON mode cleanly.");
+  console.log("[Helpdesk Server] DATABASE_HOST or DB_HOST is not set or empty. Operating in local JSON mode cleanly.");
 }
 
 // Initialize tables if MySQL pool is available
@@ -315,8 +327,8 @@ async function initializeDatabase() {
     isMySQLConnected = true;
     connection.release();
     console.log("[Helpdesk Server] MySQL Database initialized successfully and tables verified.");
-  } catch (err) {
-    console.error("[Helpdesk Server] MySQL Initialization/Connection Error Details:", err);
+  } catch (err: any) {
+    console.log(`[Helpdesk Server] Database connection info: MySQL not reachable on ${dbHost}:${dbPort} (${err.message || err}).`);
     console.warn("[Helpdesk Server] Operating in local JSON fallback mode because MySQL is not active/configured in this environment.");
     isMySQLConnected = false;
   }
@@ -585,19 +597,14 @@ async function deleteEngineerFromDB(id: string): Promise<void> {
 }
 
 async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code: string) {
-
-
   if (!resendClient) {
     console.log(`[Resend OTP Mock] RESEND_API_KEY not configured. To: ${toEmail}, OTP: ${code}`);
     return;
   }
 
   try {
-    
-
     const originalSubject = "🔐 رمز التحقق لإعادة تعيين كلمة المرور - نظام الدعم الفني لمجموعة خليفة القابضة";
     const subject = `[Test Mode] Password Reset for ${toEmail} - ${originalSubject}`;
-
 
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 25px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #f8fafc; max-width: 500px; margin: 0 auto;">
@@ -617,7 +624,7 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
     `;
 
     const response = await resendClient.emails.send({
-      from:"onboarding@resend.dev",
+      from: "onboarding@resend.dev",
       to: "albrkyhmady3@gmail.com",
       subject: subject,
       text: `رمز التحقق الخاص بك هو: ${code}`,
@@ -628,7 +635,6 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
       throw new Error(JSON.stringify(response.error));
     }
 
-
     console.log(`[Resend OTP] Successfully sent email for ${toEmail} to albrkyhmady3@gmail.com. ID: ${response.data?.id}`);
   } catch (err) {
     console.error(`[Resend OTP] Failed to send email for ${toEmail} to albrkyhmady3@gmail.com:`, err);
@@ -636,21 +642,17 @@ async function sendPasswordResetOTPEmail(toEmail: string, userName: string, code
 }
 
 async function sendLoginAlertEmail(toEmail: string, userName: string, isActivation: boolean) {
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_PASS;
-
   if (!resendClient) {
     console.log(`[Resend Alert Mock] RESEND_API_KEY not configured. To: ${toEmail}, User: ${userName}, Activation: ${isActivation}`);
     return;
   }
 
   try {
-     
-
     const originalSubject = isActivation 
       ? "🔐 تم تفعيل حسابك بنجاح - نظام الدعم الفني لمجموعة خليفة القابضة" 
       : "🛡️ تنبيه دخول جديد - نظام الدعم الفني لمجموعة خليفة القابضة";
-       const subject = `[Test Mode] ${isActivation ? "Activation" : "Login Alert"} for ${toEmail} - ${originalSubject}`;
+    
+    const subject = `[Test Mode] ${isActivation ? "Activation" : "Login Alert"} for ${toEmail} - ${originalSubject}`;
 
     const textContent = isActivation
       ? `عزيزنا الموظف ${userName}،\n\nتم تفعيل حسابك بنجاح وتعيين كلمة المرور الخاصة بك في نظام الدعم الفني لمجموعة خليفة القابضة.\nإذا لم تقم بهذا الإجراء بنفسك، يرجى التواصل مع إدارة تكنولوجيا المعلومات فوراً.\n\nرابط إعادة تعيين كلمة المرور مستقبلاً:\nhttps://ais-dev-ur7e5mvcj6vfbv32opf7om-473752403391.europe-west2.run.app/ (عبر البوابة)`
@@ -674,7 +676,7 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
 
     const response = await resendClient.emails.send({
       from: "onboarding@resend.dev",
-      to:"albrkyhmady3@gmail.com",
+      to: "albrkyhmady3@gmail.com",
       subject: subject,
       text: textContent,
       html: htmlContent,
@@ -684,10 +686,9 @@ async function sendLoginAlertEmail(toEmail: string, userName: string, isActivati
       throw new Error(JSON.stringify(response.error));
     }
 
-
-    console.log(`[Resend Alert] Successfully sent Email for ${toEmail} to albrkyhmady3@gmail.com. ID: ${response.data?.id}`);
+    console.log(`[Resend Alert] Successfully sent email for ${toEmail} to albrkyhmady3@gmail.com. ID: ${response.data?.id}`);
   } catch (err) {
-    console.error(`[Email Alert] Failed to send email for ${toEmail} to albrkyhmady3@gmail.com:`, err);
+    console.error(`[Resend Alert] Failed to send email for ${toEmail} to albrkyhmady3@gmail.com:`, err);
   }
 }
 
@@ -733,7 +734,6 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: "50mb" }));
 
-  
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {
@@ -873,7 +873,6 @@ async function startServer() {
       console.error("Failed to send reset OTP email:", err);
     });
 
-    
     const isMock = !resendClient;
 
     return res.json({
@@ -1039,7 +1038,7 @@ async function startServer() {
     res.json(tickets);
   });
 
-  // 3. Create a ticket (Strict check: one active ticket per employee)
+  // 3. Create a ticket (Strict check: one active ticket per employee) - Apply rate limiter
   app.post("/api/tickets", apiLimiter, async (req, res) => {
     const { ticket } = req.body;
     if (!ticket) {
@@ -1060,7 +1059,23 @@ async function startServer() {
     }
 
     await saveTicketToDB(ticket);
-       
+    
+    // Asynchronous background sync with Odoo ERP (non-blocking)
+    if (process.env.ODOO_URL) {
+      odooService.createTicket({
+        name: `[Ticket #${ticket.id}] ${ticket.subject || ticket.issueType || 'الدعم الفني'}`,
+        description: `الموظف: ${ticket.employeeName || ''} (ID: ${ticket.employeeId || ''})\nالموقع: ${ticket.location || ''}\nالتفاصيل: ${ticket.details || ticket.description || ''}`,
+        partner_email: ticket.email || '',
+        priority: ticket.urgency === 'high' ? '3' : ticket.urgency === 'medium' ? '2' : '1'
+      }).then((odooId) => {
+        if (odooId) {
+          updateTicketInDB(ticket.id, { odooId }).catch(() => {});
+        }
+      }).catch(err => {
+        console.warn(`[Odoo Sync Warning] Failed background create: ${err.message}`);
+      });
+    }
+
     const ioServer = req.app.get("io") as Server;
     if (ioServer) {
       ioServer.emit("newTicket", ticket);
@@ -1087,11 +1102,21 @@ async function startServer() {
     // Get updated ticket
     const updatedTickets = await getTicketsFromDB();
     const updatedTicket = updatedTickets.find((t) => t.id === id);
-    
+
+    // Asynchronous background status sync with Odoo ERP (non-blocking)
+    if (process.env.ODOO_URL && updatedTicket && updates.status) {
+      const odooRecordId = (updatedTicket as any).odooId || Number(id);
+      if (!isNaN(odooRecordId)) {
+        odooService.updateTicketStatus(odooRecordId, updates.status).catch(err => {
+          console.warn(`[Odoo Sync Warning] Failed status update for Ticket #${id}: ${err.message}`);
+        });
+      }
+    }
+
     const ioServer = req.app.get("io") as Server;
     if (ioServer) {
       ioServer.emit("updateTicket", updatedTicket);
-         ioServer.emit("ticketUpdated", updatedTicket);
+      ioServer.emit("ticketUpdated", updatedTicket);
 
       if (updatedTicket && (updatedTicket.status === "resolved" || updatedTicket.status === "closed")) {
         ioServer.emit("ticketCompleted", updatedTicket);
@@ -1117,7 +1142,6 @@ async function startServer() {
 
     await saveChatMessageToDB(message);
 
-    
     const ioServer = req.app.get("io") as Server;
     if (ioServer) {
       ioServer.emit("newChatMessage", message);
