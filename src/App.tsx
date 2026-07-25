@@ -104,7 +104,7 @@ const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '';
 export default function App() {
   // --- Core Application States ---
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [locations, setLocations] = useState<string[]>([]);
+  const [locations, setLocations] = useState<string[]>(LOCATIONS);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentUser, setCurrentUser] = useState<UserType | null>(() => {
     const saved = localStorage.getItem('kh_current_user_v2');
@@ -199,7 +199,7 @@ export default function App() {
   const [isResetLoading, setIsResetLoading] = useState(false);
 
   // --- Ticket Form States ---
-  const [newLocation, setNewLocation] = useState('');
+  const [newLocation, setNewLocation] = useState(LOCATIONS[0]);
   const [newCategory, setNewCategory] = useState(Object.keys(PROBLEM_HIERARCHY)[0]);
   const [newSubcategory, setNewSubcategory] = useState('عام'); // default value, third field is removed from UI
   const [newTicketDesc, setNewTicketDesc] = useState('');
@@ -305,14 +305,17 @@ export default function App() {
 
   
   // --- API Sync Workflows ---
-  const fetchLocations = async () => {
+   const fetchLocations = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/locations`);
       if (res.ok) {
         const data = await res.json();
-        setLocations(data);
-        if (data.length > 0 && !newLocation) {
-          setNewLocation(data[0]);
+        if (Array.isArray(data) && data.length > 0) {
+          setLocations(data);
+          setNewLocation(prev => {
+            if (prev && data.includes(prev)) return prev;
+            return prev || data[0];
+          });
         }
       }
     } catch (e) {
@@ -955,6 +958,12 @@ export default function App() {
         return;
       }
 
+
+      
+      // Optimistic instant state update for immediate UI response
+      const createdTicket = data.ticket || newTicket;
+      setTickets(prev => [createdTicket, ...prev.filter(t => t.id !== createdTicket.id)]);
+
       // Refresh local tickets list
       fetchTickets();
       
@@ -1000,6 +1009,12 @@ export default function App() {
       if (res.ok) {
         addSystemLog(`Ticket ${ticketId} accepted by engineer: ${currentUser.name}`);
         setActiveChatTicketId(ticketId);
+
+        
+        // Immediate instant state update for 0ms visual delay
+        if (data.ticket) {
+          setTickets(prev => prev.map(t => t.id === ticketId ? data.ticket : t));
+        }
 
         // Post system welcome message to chat (wrapped in try-catch so it doesn't block ticket state change)
         try {
@@ -1060,8 +1075,16 @@ export default function App() {
         body: JSON.stringify(updates)
       });
 
+      
+      const data = await res.json();
+
       if (res.ok) {
         addSystemLog(`Ticket ${resolvingTicketId} resolved by engineer: ${currentUser.name}`);
+
+        
+        if (data.ticket) {
+          setTickets(prev => prev.map(t => t.id === resolvingTicketId ? data.ticket : t));
+        }
 
         const resolvedMsg: ChatMessage = {
           id: `sys-resolved-${Date.now()}`,
@@ -1109,8 +1132,13 @@ export default function App() {
         body: JSON.stringify(updates)
       });
 
+      const data = await res.json();
+
       if (res.ok) {
         addSystemLog(`Ticket ${ratingTicketId} rated with ${ratingStars} stars by employee.`);
+          if (data.ticket) {
+          setTickets(prev => prev.map(t => t.id === ratingTicketId ? data.ticket : t));
+        }
         setRatingTicketId(null);
         setRatingStars(5);
         setRatingComment('');
@@ -1151,6 +1179,8 @@ export default function App() {
         body: JSON.stringify({ message: newMsg })
       });
 
+      
+
       if (res.ok) {
         setChatInputText('');
         setChatAttachedFile(null);
@@ -1177,8 +1207,13 @@ export default function App() {
         body: JSON.stringify(updates)
       });
 
+      const data = await res.json();
+
       if (res.ok) {
         addSystemLog(`[SuperAdmin Override] Toggled urgency of ticket ${ticketId}`);
+         if (data.ticket) {
+          setTickets(prev => prev.map(t => t.id === ticketId ? data.ticket : t));
+        }
         fetchTickets();
       }
     } catch (e) {
@@ -1207,8 +1242,13 @@ export default function App() {
         body: JSON.stringify(updates)
       });
 
+      const data = await res.json();
+
       if (res.ok) {
         addSystemLog(`[SuperAdmin Override] Changed status of ticket ${ticketId} to ${targetStatus}`);
+         if (data.ticket) {
+          setTickets(prev => prev.map(t => t.id === ticketId ? data.ticket : t));
+        }
         fetchTickets();
         fetchReports();
       }
@@ -1223,11 +1263,7 @@ export default function App() {
     // Using simple elegant custom UI trigger or standard confirmation
     if (window.confirm(`⚠️ تحذير سوبر أدمن: هل أنت متأكد من حذف التذكرة رقم [${ticketId}] نهائياً من خوادم مجموعة خليفة؟`)) {
       try {
-        // Since we store all states together, we can flag status or handle differently.
-        // For admin delete, we can simply PUT status to custom or handle directly.
-        // Let's implement deleting via status 'deleted' or filtering out. To be simple and robust, 
-        // we can set a flag on the server or mark status. Let's send a status update to 'deleted'
-        // and filter deleted tickets from our views.
+        
         const res = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1236,6 +1272,7 @@ export default function App() {
 
         if (res.ok) {
           addSystemLog(`[SuperAdmin Override] Deleted ticket ${ticketId} permanently from database.`);
+           setTickets(prev => prev.filter(t => t.id !== ticketId));
           if (activeChatTicketId === ticketId) {
             setActiveChatTicketId(null);
           }
@@ -1643,11 +1680,11 @@ export default function App() {
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">الموقع الفعلي للمشكلة <span className="text-red-500">*</span></label>
                         <select 
-                          value={newLocation || (locations[0] || '')}
+                          value={newLocation}
                           onChange={(e) => setNewLocation(e.target.value)}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-right"
                         >
-                          {(locations.length > 0 ? locations : LOCATIONS).map((loc, idx) => (
+                          {locations.map((loc, idx) => (
                             <option key={idx} value={loc}>{loc}</option>
                           ))}
                         </select>

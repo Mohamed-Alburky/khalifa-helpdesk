@@ -151,35 +151,79 @@ export class OdooService {
   }
 
   /**
-   * 2. Update an existing Ticket's stage/status in Odoo
-   * @param odooId Record ID in Odoo
-   * @param status App status string (e.g. 'in_progress', 'resolved', 'closed')
+   * Post a chatter message / note on a record in Odoo
    */
-  public async updateTicketStatus(odooId: number, status: string): Promise<boolean> {
+  public async postMessage(model: string, recordId: number, body: string): Promise<boolean> {
+    try {
+      await this.executeKw(model, 'message_post', [[recordId]], {
+        body: body,
+        message_type: 'comment',
+        subtype_xmlid: 'mail.mt_note',
+      });
+      console.log(`[Odoo Integration] Posted chatter note on ${model} #${recordId}`);
+      return true;
+    } catch (err: any) {
+      console.warn(`[Odoo Integration] Failed to post message to ${model} #${recordId}: ${err.message || err}`);
+      return false;
+    }
+  }
+
+  /**
+   * 2. Update an existing Ticket's stage/status in Odoo with rich details
+   * @param odooId Record ID in Odoo
+   * @param status App status string ('pending' | 'active' | 'in_progress' | 'resolved' | 'closed')
+   * @param extraDetails Optional additional info (engineer name, resolution notes, etc.)
+   */
+  public async updateTicketStatus(
+    odooId: number,
+    status: string,
+    extraDetails?: {
+      engineerName?: string;
+      engineerEmail?: string;
+      resolutionNotes?: string;
+      ratingStars?: number;
+      ratingComment?: string;
+      assignedAt?: string;
+    }
+  ): Promise<boolean> {
     const model = process.env.ODOO_TICKET_MODEL || 'helpdesk.ticket';
 
-    // Map your custom app status to Odoo stage_id or status field
-    // In Odoo, stages are usually integers (Many2one relation)
+    // Map custom app status to Odoo stage_id
     const stageMapping: Record<string, number> = {
       pending: 1,      // New / Open
+      active: 2,       // In Progress
       in_progress: 2,  // In Progress
       resolved: 3,     // Solved / Done
-      closed: 4,       // Cancelled / Closed
+      closed: 4,       // Closed / Done
     };
 
     const stageId = stageMapping[status] || 1;
 
     try {
-      // execute_kw(db, uid, password, model, 'write', [[id], { stage_id: stageId }])
+      // 1. Update Odoo stage_id
       const success = await this.executeKw<boolean>(model, 'write', [
         [odooId],
         { stage_id: stageId },
       ]);
       console.log(`[Odoo Integration] Updated Ticket #${odooId} status to '${status}' (stage_id: ${stageId}): ${success}`);
+
+      // 2. Post detailed updates to Odoo Chatter / Log
+      let logText = `📌 [تحديث من نظام الدعم الفني] تغيرت حالة البطاقة إلى: ${status.toUpperCase()}`;
+
+      if (status === 'active' && extraDetails?.engineerName) {
+        logText = `👨‍💻 <b>تم استلام البطاقة وبدء المعالجة</b><br/><b>المستلم:</b> المهندس ${extraDetails.engineerName}${extraDetails.engineerEmail ? ` (${extraDetails.engineerEmail})` : ''}<br/><b>وقت الاستلام:</b> ${extraDetails.assignedAt || new Date().toLocaleString('ar-SA')}`;
+      } else if (status === 'resolved') {
+        logText = `✅ <b>تم إنجاز وحل التذكرة</b><br/><b>المهندس:</b> ${extraDetails?.engineerName || 'المختص'}<br/><b>ملاحظات الحل:</b> ${extraDetails?.resolutionNotes || 'تم حل المشكلة بنجاح'}`;
+      } else if (status === 'closed' && extraDetails?.ratingStars) {
+        logText = `⭐ <b>تقييم الخدمة وإغلاق التذكرة</b><br/><b>التقييم:</b> ${extraDetails.ratingStars} من 5 نجوم<br/><b>ملاحظات الموظف:</b> ${extraDetails.ratingComment || 'لا يوجد'}`;
+      }
+
+      await this.postMessage(model, odooId, logText);
+
       return success;
     } catch (err: any) {
-      console.warn(`[Odoo Integration] Failed to update Odoo Ticket #${odooId}: ${err.message}`);
-      throw err;
+      console.warn(`[Odoo Integration] Failed to update Odoo Ticket #${odooId}: ${err.message || err}`);
+      return false;
     }
   }
 

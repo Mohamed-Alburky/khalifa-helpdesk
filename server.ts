@@ -1063,16 +1063,17 @@ async function startServer() {
     // Asynchronous background sync with Odoo ERP (non-blocking)
     if (process.env.ODOO_URL) {
       odooService.createTicket({
-        name: `[Ticket #${ticket.id}] ${ticket.subject || ticket.issueType || 'الدعم الفني'}`,
-        description: `الموظف: ${ticket.employeeName || ''} (ID: ${ticket.employeeId || ''})\nالموقع: ${ticket.location || ''}\nالتفاصيل: ${ticket.details || ticket.description || ''}`,
-        partner_email: ticket.email || '',
-        priority: ticket.urgency === 'high' ? '3' : ticket.urgency === 'medium' ? '2' : '1'
+        name: `[تذكرة #${ticket.id}] ${ticket.title || ticket.category || 'الدعم الفني'}`,
+        description: `الموظف: ${ticket.employeeName || ''} (ID: ${ticket.employeeId || ''})\nالقسم: ${ticket.employeeDepartment || ''}\nالموقع: ${ticket.location || ''}\nالتفاصيل: ${ticket.description || 'لا توجد تفاصيل إضافية'}\nحالة العجلة: ${ticket.isUrgent ? 'عاجلة جداً' : 'عادية'}`,
+        partner_email: ticket.employeeEmail || '',
+        priority: ticket.isUrgent ? '3' : '1'
       }).then((odooId) => {
         if (odooId) {
+          console.log(`[Odoo Sync Success] Ticket #${ticket.id} automatically registered in Odoo with Record ID #${odooId}`);
           updateTicketInDB(ticket.id, { odooId }).catch(() => {});
         }
       }).catch(err => {
-        console.warn(`[Odoo Sync Warning] Failed background create: ${err.message}`);
+        console.warn(`[Odoo Sync Warning] Automatic Odoo registration failed for Ticket #${ticket.id}: ${err.message || err}`);
       });
     }
 
@@ -1103,12 +1104,19 @@ async function startServer() {
     const updatedTickets = await getTicketsFromDB();
     const updatedTicket = updatedTickets.find((t) => t.id === id);
 
-    // Asynchronous background status sync with Odoo ERP (non-blocking)
+    // Asynchronous background status & receiver sync with Odoo ERP (non-blocking)
     if (process.env.ODOO_URL && updatedTicket && updates.status) {
-      const odooRecordId = (updatedTicket as any).odooId || Number(id);
-      if (!isNaN(odooRecordId)) {
-        odooService.updateTicketStatus(odooRecordId, updates.status).catch(err => {
-          console.warn(`[Odoo Sync Warning] Failed status update for Ticket #${id}: ${err.message}`);
+      const odooRecordId = (updatedTicket as any).odooId || Number(id.replace(/\D/g, ''));
+      if (odooRecordId && !isNaN(odooRecordId)) {
+        odooService.updateTicketStatus(odooRecordId, updates.status, {
+          engineerName: updatedTicket.engineerName || updates.engineerName,
+          engineerEmail: updatedTicket.engineerEmail || updates.engineerEmail,
+          resolutionNotes: updatedTicket.resolutionNotes || updates.resolutionNotes,
+          ratingStars: updatedTicket.rating || updates.rating,
+          ratingComment: updatedTicket.ratingComment || updates.ratingComment,
+          assignedAt: updatedTicket.assignedAt || updates.assignedAt
+        }).catch(err => {
+          console.warn(`[Odoo Sync Warning] Failed status update for Ticket #${id}: ${err.message || err}`);
         });
       }
     }
